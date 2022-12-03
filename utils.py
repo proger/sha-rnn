@@ -30,8 +30,8 @@ def batchify(data, bsz, args):
     data = data.narrow(0, 0, nbatch * bsz)
     # Evenly divide the data across the bsz batches.
     data = data.view(bsz, -1).t().contiguous()
-    if args.cuda:
-        data = data.cuda()
+    #if args.cuda:
+    #    data = data.cuda()
     return data
 
 
@@ -39,4 +39,7 @@ def get_batch(source, i, args, seq_len=None, evaluation=False):
     seq_len = min(seq_len if seq_len else args.bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len]
-    return data, target
+    if args.cuda:
+        data = data.cuda()
+        target = target.cuda()
+    return data.long(), target.long()

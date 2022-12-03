@@ -162,7 +162,8 @@ class Block(nn.Module):
         self.attn = None
         if use_attn:
             self.attn = Attention(embed_dim, heads=heads, r=False, dropout=dropout)
-        self.ff = Boom(embed_dim, hidden_dim, dropout=dropout, shortcut=True)
+        #self.ff = Boom(embed_dim, hidden_dim, dropout=dropout, shortcut=True)
+        self.ff = None
         self.lnstart = LayerNorm(embed_dim, eps=1e-12)
         self.lnmid = LayerNorm(embed_dim, eps=1e-12)
         self.lnmem = LayerNorm(embed_dim, eps=1e-12)
