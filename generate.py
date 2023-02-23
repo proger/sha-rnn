@@ -52,22 +52,29 @@ else:
 
 import os
 import hashlib
-fn = 'corpus.{}.data'.format(hashlib.md5(args.data.encode()).hexdigest())
-if os.path.exists(fn):
-    print('Loading cached dataset...')
-    corpus = torch.load(fn)
-else:
-    print('Producing dataset...')
-    corpus = data.Corpus(args.data)
-    torch.save(corpus, fn)
+#fn = 'corpus.{}.data'.format(hashlib.md5(args.data.encode()).hexdigest())
+#if os.path.exists(fn):
+#    print('Loading cached dataset...')
+#    corpus = torch.load(fn)
+#else:
+#    print('Producing dataset...')
+#    corpus = data.Corpus(args.data)
+#    torch.save(corpus, fn)
+#
+#dictionary = corpus.dictionary
 
-dictionary = corpus.dictionary
-del corpus
+from data import Dictionary
+dictionary = Dictionary()
+for byte in range(256):
+    dictionary.add_word(byte.to_bytes(1, byteorder='little'), freq=0)
+
+#del corpus
 ntokens = len(dictionary)
 hidden = None
 mems = None
 
-text = sys.stdin.read()
+#print('ready', file=sys.stderr)
+#text = sys.stdin.read()
 
 #import youtokentome as yttm
 #m = 'data/wpwikitext-103/wt103.yttm'
@@ -77,29 +84,39 @@ text = sys.stdin.read()
 #if type(text) == str:
 #    text = text.encode('utf8')
 
+EOS = ' <eos> '
+EOS = '\n'
 #text = [str(c) if c != ord('\n') else '<eos>' for c in text]
 
-text = [w for w in text.replace('\n', ' <eos> ').split() if w]
+#text = [w for w in text.replace('\n', EOS).split() if w]
 
-maxlen = (2 * 1400) - 1
-maxlen = model.num_max_positions
-text = text[-maxlen:]
-orig = ' '.join(w if w != '<eos>' else '\n' for w in text)
+#maxlen = (2 * 1400) - 1
+#maxlen = model.num_max_positions
+#text = text[-maxlen:]
+#orig = ' '.join(w if w != '<eos>' else '\n' for w in text)
 
-print(text)
+#orig = text.encode('utf-8')
 
-text = [dictionary.word2idx[c] for c in text]
+#print(text)
 
-print(text)
+#text = [dictionary.word2idx[c] for c in text]
 
-input = torch.rand(1, 1).mul(ntokens).long()
-print(input.shape)
+#print(text)
 
-input = torch.Tensor(text).view(-1, 1).long()
+#input = torch.rand(1, 1).mul(ntokens).long()
+#print(input.shape)
+
+#input = torch.Tensor(text).view(-1, 1).long()
+#input = torch.ByteTensor(text.encode('utf-8'))
+
+orig = open('prompt.txt', 'rb').read()
+input = torch.ByteTensor(torch.ByteStorage.from_file('prompt.txt', shared=True, size=os.stat('prompt.txt').st_size))[:,None].long()
+
 if args.cuda:
     input = input.cuda()
 logits, hidden, mems = model(input[:-1, :], hidden, mems=mems, return_h=False)
 input = input[-1:, :]
+print(input)
 # TODO: We lose a token here as we predict one, update the memory, but don't add it to our generated text
 
 def produce_vocab_logits(head_weight, head_bias, hiddens):
@@ -138,10 +155,10 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
         logits[indices_to_remove] = filter_value
     return logits
 
-with open(args.outf, 'w') as outf:
+with open(args.outf, 'ab') as outf:
     #outf.write(str(orig.decode('utf8')))
     outf.write(orig)
-    outf.write('||||')
+    outf.write(b'||||')
 
     for i in range(args.words):
         with torch.no_grad():
@@ -162,8 +179,11 @@ with open(args.outf, 'w') as outf:
 
         #outf.write(word + ('\n' if i % 20 == 19 else ' '))
         #outf.write(chr(int(word)) if word != '<eos>' else '\n')
-        outf.write(word + ' ' if word != '<eos>' else '\n')
+        #print(word_idx)
+        outf.write(word)
 
         if i % args.log_interval == 0:
             print('| Generated {}/{} words'.format(i, args.words))
-            print('|| Memory: {}'.format(None if mems is None else mems[0].shape))
+            #print('|| Memory: {}'.format(mems[-1].shape if mems else None))
+
+    outf.write(b'\n\n')
