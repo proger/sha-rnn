@@ -173,6 +173,11 @@ if not criterion:
 if args.cuda:
     model = model.cuda()
     criterion = criterion.cuda()
+
+if False:
+    print('Compiling model...')
+    model = torch.compile(model)
+
 if False: # or args.jit:
     print('Jitting ...')
     model.eval()
@@ -208,6 +213,8 @@ def evaluate(data_source, batch_size=10):
 
 
 def train(epoch=0):
+    scaler = torch.cuda.amp.GradScaler()
+
     # Turn on training mode which enables dropout.
     if args.model == 'QRNN' and getattr(model, 'reset', None): model.reset()
     total_loss = 0
@@ -263,10 +270,11 @@ def train(epoch=0):
                 b.rnn.weight_hh_l0.data = wd / (1 - args.wdrop)
                 b.rnn.flatten_parameters()
 
-        #output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
-        #output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
-        output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
-        raw_loss = criterion(model.decoder.weight, model.decoder.bias, output, targets.view(-1))
+        with torch.autocast(device_type='cuda' if args.cuda else 'cpu'):
+            #output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
+            #output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
+            output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
+            raw_loss = criterion(model.decoder.weight, model.decoder.bias, output, targets.view(-1))
 
         losses.append(raw_loss)
 
@@ -299,12 +307,15 @@ def train(epoch=0):
             loss = functools.reduce(lambda x, y: x + y, losses)
             #print(losses)
             #loss.backward()
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
+
+            scaler.scale(loss).backward()
+            #with amp.scale_loss(loss, optimizer) as scaled_loss:
+            #    scaled_loss.backward()
 
             # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
             if args.clip: torch.nn.utils.clip_grad_norm_(params, args.clip)
-            optimizer.step()
+            #optimizer.step()
+            scaler.step(optimizer)
             if hidden is not None:
                 #if np.random.random() > 0.975:
                 #    hidden = None
@@ -317,6 +328,7 @@ def train(epoch=0):
                 mems = repackage_hidden(mems)
             optimizer.zero_grad()
             losses = []
+            scaler.update()
 
         if args.wdrop:
             for (w, m, b) in zip(rnn_hh_weights, rnn_hh_masks, model.blocks):
@@ -371,8 +383,8 @@ try:
         print('Lookahead - k {} and alpha {}'.format(k, alpha))
         optimizer = Lookahead(base_optimizer=optimizer, k=k, alpha=alpha)
 
-    from apex import amp
-    model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
+    #from apex import amp
+    #model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
     #model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
 
     for epoch in range(1, args.epochs+1):
