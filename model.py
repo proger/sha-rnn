@@ -163,7 +163,6 @@ class Block(nn.Module):
         self.attn = None
         if use_attn:
             self.attn = Attention(embed_dim, heads=heads, r=False, dropout=dropout)
-        #self.ff = Boom(embed_dim, hidden_dim, dropout=dropout, shortcut=True)
         self.ff = None
         self.lnstart = LayerNorm(embed_dim, eps=1e-12)
         self.lnmid = LayerNorm(embed_dim, eps=1e-12)
@@ -335,37 +334,3 @@ class GELU(nn.Module):
         # See https://arxiv.org/abs/1606.08415
         #return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         return x * torch.sigmoid(1.702 * x)
-
-#@torch.jit.script
-#def GELU(x):
-#    return x * torch.sigmoid(1.702 * x)
-
-class Boom(nn.Module):
-
-    def __init__(self, d_model, dim_feedforward=2048, dropout=0.1, shortcut=False):
-        super(Boom, self).__init__()
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.dropout = nn.Dropout(dropout) if dropout else None
-        if not shortcut:
-            self.linear2 = nn.Linear(dim_feedforward, d_model)
-        self.shortcut = shortcut
-        #self.act = nn.ReLU()
-        self.act = GELU()
-        #self.act = nn.Tanh()
-
-    def forward(self, input):
-        x = self.act(self.linear1(input))
-        if self.dropout: x = self.dropout(x)
-        if self.shortcut:
-            # Trim the end off if the size is different
-            ninp = input.shape[-1]
-            x = torch.narrow(x, -1, 0, x.shape[-1] // ninp * ninp)
-            # Divide the hidden size evenly into chunks
-            x = x.view(*x.shape[:-1], x.shape[-1] // ninp, ninp)
-            # Collapse the chunks through summation
-            #h = h + self.drop(x).sum(dim=-2)
-            z = x.sum(dim=-2)
-        else:
-            z = self.linear2(x)
-
-        return z
