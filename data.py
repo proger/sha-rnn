@@ -39,8 +39,8 @@ class Corpus(object):
         for byte in range(256):
             self.dictionary.add_word(byte.to_bytes(1, byteorder='little'), freq=0)
         self.train = self.tokenize(os.path.join(path, 'train.txt.raw'), construct_dictionary=True)
-        self.valid = self.tokenize(os.path.join(path, 'valid.txt.raw'))
-        self.test = self.tokenize(os.path.join(path, 'test.txt.raw'))
+        self.valid = self.tokenize(os.path.join(path, 'val.txt.raw'))
+        self.test = self.tokenize(os.path.join(path, 'val.txt.raw'))
 
     def tokenize(self, path, construct_dictionary=False):
         """Tokenizes a text file."""

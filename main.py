@@ -14,27 +14,27 @@ import model
 from utils import batchify, get_batch, repackage_hidden, zero_hidden
 
 parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
-parser.add_argument('--data', type=str, default='data/penn/',
+parser.add_argument('--data', type=str, default='data/ubertext/',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (LSTM, QRNN, GRU)')
-parser.add_argument('--emsize', type=int, default=400,
+parser.add_argument('--emsize', type=int, default=1024,
                     help='size of word embeddings')
-parser.add_argument('--nhid', type=int, default=1150,
+parser.add_argument('--nhid', type=int, default=4096,
                     help='number of hidden units per layer')
-parser.add_argument('--nlayers', type=int, default=3,
+parser.add_argument('--nlayers', type=int, default=4,
                     help='number of layers')
-parser.add_argument('--lr', type=float, default=30,
+parser.add_argument('--lr', type=float, default=2e-3,
                     help='initial learning rate')
 parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
-parser.add_argument('--epochs', type=int, default=8000,
+parser.add_argument('--epochs', type=int, default=5,
                     help='upper epoch limit')
-parser.add_argument('--batch_size', type=int, default=80, metavar='N',
+parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=70,
+parser.add_argument('--bptt', type=int, default=1024,
                     help='sequence length')
-parser.add_argument('--warmup', type=int, default=4000,
+parser.add_argument('--warmup', type=int, default=800,
                     help='warmup for learning rate')
 parser.add_argument('--cooldown', type=int, default=None,
                     help='cooldown for learning rate')
@@ -119,7 +119,6 @@ if os.path.exists(fn):
 else:
     print('Producing dataset...')
     corpus = data.Corpus(args.data)
-    torch.save(corpus, fn)
 
 eval_batch_size = min(100, args.batch_size)
 print('Eval batch size of', eval_batch_size)
