@@ -28,11 +28,11 @@ parser.add_argument('--lr', type=float, default=2e-3,
                     help='initial learning rate')
 parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
-parser.add_argument('--epochs', type=int, default=5,
+parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=1024,
+parser.add_argument('--bptt', type=int, default=128,
                     help='sequence length')
 parser.add_argument('--warmup', type=int, default=800,
                     help='warmup for learning rate')
