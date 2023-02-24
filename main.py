@@ -269,7 +269,7 @@ def train(epoch=0):
                 b.rnn.weight_hh_l0.data = wd / (1 - args.wdrop)
                 b.rnn.flatten_parameters()
 
-        with torch.autocast(device_type='cuda' if args.cuda else 'cpu'):
+        with torch.autocast(device_type='cuda' if args.cuda else 'cpu', dtype=torch.bfloat16):
             #output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
             #output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
             output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
