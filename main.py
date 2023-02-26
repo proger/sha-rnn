@@ -304,15 +304,15 @@ def train(epoch=0):
 
         if batch % loss_every_n_batches == 0:
             loss = functools.reduce(lambda x, y: x + y, losses)
-            #print(losses)
-            #loss.backward()
 
             scaler.scale(loss).backward()
-            #with amp.scale_loss(loss, optimizer) as scaled_loss:
-            #    scaled_loss.backward()
 
             # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-            if args.clip: torch.nn.utils.clip_grad_norm_(params, args.clip)
+            if args.clip:
+                scaler.unscale_(opt)
+                grad_norm = torch.nn.utils.clip_grad_norm_(params, args.clip)
+            else:
+                grad_norm = -1
             #optimizer.step()
             scaler.step(optimizer)
             if hidden is not None:
