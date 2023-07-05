@@ -1,3 +1,11 @@
+# byte-level SHA-RNN for ukpron
+
+See checkpoint at https://huggingface.co/darkproger/ukpron
+
+```
+python -m generate --checkpoint PRON4.pt вийшов я із швайнокарасем на поле сів похрустити і тут бачу ведмідя так я його джавеліном гаплик у гу карасем в гвинтокрилі перепрограмувати швайнокарасевий кондомініум швайнокарасево-кондомініумно підутюжувавшись філософсько-політологічная шліфувально-полірувальній шліфувально полірувальній емігруватипотрібно
+```
+
 # Single Headed Attention RNN
 
 For full details see the paper [Single Headed Attention RNN: Stop Thinking With Your Head](https://arxiv.org/abs/1911.11423).
