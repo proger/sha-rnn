@@ -45,4 +45,4 @@ class Corpus(object):
     def tokenize(self, path, construct_dictionary=False):
         """Tokenizes a text file."""
         assert os.path.exists(path)
-        return torch.ByteTensor(torch.ByteStorage.from_file(path, shared=True, size=os.stat(path).st_size))
+        return torch.ByteTensor(torch.ByteStorage.from_file(path, shared=False, size=os.stat(path).st_size))

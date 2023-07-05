@@ -1,6 +1,9 @@
 import argparse
 import sys
+from itertools import chain
+from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -13,9 +16,7 @@ parser.add_argument('--data', type=str, default='./data/penn',
                     help='location of the data corpus')
 parser.add_argument('--checkpoint', type=str, default='./model.pt',
                     help='model checkpoint to use')
-parser.add_argument('--outf', type=str, default='output.txt',
-                    help='output file for generated text')
-parser.add_argument('--words', type=int, default='1000',
+parser.add_argument('--words', type=int, default='128',
                     help='number of words to generate')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -25,6 +26,8 @@ parser.add_argument('--temperature', type=float, default=1.0,
                     help='temperature - higher will increase diversity')
 parser.add_argument('--log-interval', type=int, default=100,
                     help='reporting interval')
+parser.add_argument('--file', type=Path, nargs='*')
+parser.add_argument('prompt', nargs='*')
 args = parser.parse_args()
 
 def model_save(fn):
@@ -109,16 +112,6 @@ EOS = '\n'
 #input = torch.Tensor(text).view(-1, 1).long()
 #input = torch.ByteTensor(text.encode('utf-8'))
 
-orig = open('prompt.txt', 'rb').read()
-input = torch.ByteTensor(torch.ByteStorage.from_file('prompt.txt', shared=True, size=os.stat('prompt.txt').st_size))[:,None].long()
-
-if args.cuda:
-    input = input.cuda()
-logits, hidden, mems = model(input[:-1, :], hidden, mems=mems, return_h=False)
-input = input[-1:, :]
-print(input)
-# TODO: We lose a token here as we predict one, update the memory, but don't add it to our generated text
-
 def produce_vocab_logits(head_weight, head_bias, hiddens):
     head_res = torch.nn.functional.linear(hiddens, head_weight, bias=head_bias)
     #softmaxed_head_res = torch.nn.functional.log_softmax(head_res, dim=-1)
@@ -155,12 +148,35 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')
         logits[indices_to_remove] = filter_value
     return logits
 
-with open(args.outf, 'ab') as outf:
-    #outf.write(str(orig.decode('utf8')))
-    outf.write(orig)
-    outf.write(b'||||')
+context = 'постійно\tp o s t1 i1 j n o\n'
+context = 'карликом-наркоторговцем\tk a1 r l y k o m n a r k o t o r h o1 v ts e m\n'
+context = 'карасем\tk a r a s e1 m\n'
+
+if args.file:
+    prompts = chain(line.split(maxsplit=1)[0]
+                      for filename in args.file
+                      for line in filename.read_text().split('\n')[:-1])
+    prompts = chain(prompts, args.prompt)
+else:
+    prompts = args.prompt
+
+for input_word in prompts:
+    prompt = context + input_word + '\t'
+    buffer = np.array(np.frombuffer(prompt.encode('utf-8'), dtype=np.uint8))
+    input = torch.from_numpy(buffer).clone().long()[:,None]
+
+    if args.cuda:
+        input = input.cuda()
+
+    logits, hidden, mems = model(input[:-1, :], hidden, mems=mems, return_h=False)
+    input = input[-1:, :]
+    # TODO: We lose a token here as we predict one, update the memory, but don't add it to our generated text
+
+    sys.stdout.buffer.write(input_word.encode('utf-8'))
+    sys.stdout.buffer.write(b'\t')
 
     for i in range(args.words):
+        #import ipdb; ipdb.set_trace()
         with torch.no_grad():
             logits, hidden, mems = model(input, hidden, mems=mems, return_h=False)
         # TODO: What if we want to start with no history?
@@ -169,21 +185,16 @@ with open(args.outf, 'ab') as outf:
         #    magic_mem.append(torch.cat([ma, mb], dim=0)[-maxlen:])
         #mems = magic_mem
         output = produce_vocab_logits(model.decoder.weight, model.decoder.bias, logits) / args.temperature
-        #output = top_k_top_p_filtering(output.view(-1), top_k=100).view(*output.shape)
-        output = top_k_top_p_filtering(output.view(-1), top_p=0.98).view(*output.shape)
+        output = top_k_top_p_filtering(output.view(-1), top_k=1).view(*output.shape)
+        #output = top_k_top_p_filtering(output.view(-1), top_p=0.98).view(*output.shape)
+        #print('output', output)
         word_weights = F.softmax(output, dim=-1).squeeze()
+        #print('word_weights', word_weights)
         #word_weights = output.squeeze().data.div(args.temperature).exp().cpu()
         word_idx = torch.multinomial(word_weights, num_samples=1)[0]
         input.data.fill_(word_idx)
         word = dictionary.idx2word[word_idx]
 
-        #outf.write(word + ('\n' if i % 20 == 19 else ' '))
-        #outf.write(chr(int(word)) if word != '<eos>' else '\n')
-        #print(word_idx)
-        outf.write(word)
-
-        if i % args.log_interval == 0:
-            print('| Generated {}/{} words'.format(i, args.words))
-            #print('|| Memory: {}'.format(mems[-1].shape if mems else None))
-
-    outf.write(b'\n\n')
+        sys.stdout.buffer.write(word)
+        if word == b'\n':
+            break

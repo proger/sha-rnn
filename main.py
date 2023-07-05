@@ -18,35 +18,35 @@ parser.add_argument('--data', type=str, default='data/ubertext/',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (LSTM, QRNN, GRU)')
-parser.add_argument('--emsize', type=int, default=1024,
+parser.add_argument('--emsize', type=int, default=512,
                     help='size of word embeddings')
-parser.add_argument('--nhid', type=int, default=4096,
+parser.add_argument('--nhid', type=int, default=2048,
                     help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=4,
                     help='number of layers')
-parser.add_argument('--lr', type=float, default=2e-3,
+parser.add_argument('--lr', type=float, default=0.003,
                     help='initial learning rate')
 parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=1,
                     help='upper epoch limit')
-parser.add_argument('--batch_size', type=int, default=32, metavar='N',
+parser.add_argument('--batch_size', type=int, default=1024, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=128,
+parser.add_argument('--bptt', type=int, default=256,
                     help='sequence length')
-parser.add_argument('--warmup', type=int, default=800,
+parser.add_argument('--warmup', type=int, default=10000,
                     help='warmup for learning rate')
 parser.add_argument('--cooldown', type=int, default=None,
                     help='cooldown for learning rate')
 parser.add_argument('--accumulate', type=int, default=1,
                     help='number of batches to accumulate before gradient update')
-parser.add_argument('--dropout', type=float, default=0.4,
+parser.add_argument('--dropout', type=float, default=0,
                     help='dropout applied to layers (0 = no dropout)')
-parser.add_argument('--dropouth', type=float, default=0.3,
+parser.add_argument('--dropouth', type=float, default=0,
                     help='dropout for rnn layers (0 = no dropout)')
-parser.add_argument('--dropouti', type=float, default=0.65,
+parser.add_argument('--dropouti', type=float, default=0,
                     help='dropout for input embedding layers (0 = no dropout)')
-parser.add_argument('--dropoute', type=float, default=0.1,
+parser.add_argument('--dropoute', type=float, default=0,
                     help='dropout to remove words from embedding layer (0 = no dropout)')
 parser.add_argument('--wdrop', type=float, default=0.0,
                     help='amount of weight dropout to apply to the RNN hidden to hidden matrix')
@@ -56,7 +56,7 @@ parser.add_argument('--nonmono', type=int, default=5,
                     help='random seed')
 parser.add_argument('--cuda', action='store_false',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=200, metavar='N',
+parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='report interval')
 randomhash = ''.join(str(time.time()).split('.'))
 parser.add_argument('--save', type=str,  default=randomhash+'.pt',
@@ -69,7 +69,7 @@ parser.add_argument('--wdecay', type=float, default=1.2e-6,
                     help='weight decay applied to all weights')
 parser.add_argument('--resume', type=str,  default='',
                     help='path of model to resume')
-parser.add_argument('--optimizer', type=str,  default='sgd',
+parser.add_argument('--optimizer', type=str,  default='lamb',
                     help='optimizer to use (sgd, adam)')
 parser.add_argument('--when', nargs="+", type=int, default=[-1],
                     help='When (which epochs) to divide the learning rate by 10 - accepts multiple')
@@ -269,7 +269,7 @@ def train(epoch=0):
                 b.rnn.weight_hh_l0.data = wd / (1 - args.wdrop)
                 b.rnn.flatten_parameters()
 
-        with torch.autocast(device_type='cuda' if args.cuda else 'cpu', dtype=torch.bfloat16):
+        with torch.autocast(device_type='cuda' if args.cuda else 'cpu', dtype=torch.float16):
             #output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
             #output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
             output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
@@ -313,8 +313,13 @@ def train(epoch=0):
                 grad_norm = torch.nn.utils.clip_grad_norm_(params, args.clip)
             else:
                 grad_norm = -1
-            #optimizer.step()
-            scaler.step(optimizer)
+
+            if torch.isnan(grad_norm).any() or torch.isinf(grad_norm).any():
+                print("skipping batch")
+            else:
+                #optimizer.step()
+                scaler.step(optimizer)
+
             if hidden is not None:
                 #if np.random.random() > 0.975:
                 #    hidden = None
@@ -343,10 +348,12 @@ def train(epoch=0):
         if batch % args.log_interval == 0 and batch > 0:
             cur_loss = total_loss.item() / args.log_interval
             elapsed = time.time() - start_time
+            ms_per_batch = elapsed * 1000 / args.log_interval
+            eta = (ms_per_batch / 1000) * len(train_data) // args.bptt
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:05.5f} | ms/batch {:5.2f} | '
-                    'loss {:5.2f} | ppl {:8.2f} | bpc {:8.3f}'.format(
+                    'loss {:5.2f} | ppl {:8.2f} | bpc {:8.3f} | eta {:8.3f} | grad {:8.3f}'.format(
                 epoch, batch, len(train_data) // args.bptt, optimizer.param_groups[0]['lr'],
-                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss), cur_loss / math.log(2)))
+                ms_per_batch, cur_loss, math.exp(cur_loss), cur_loss / math.log(2), eta / 60 / 60, grad_norm))
             total_loss = 0
             start_time = time.time()
         ###

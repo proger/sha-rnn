@@ -43,3 +43,17 @@ def get_batch(source, i, args, seq_len=None, evaluation=False):
         data = data.cuda()
         target = target.cuda()
     return data.long(), target.long()
+
+if __name__ == '__main__':
+    import data
+    corpus = data.Corpus('data/ubertext')
+
+    class args:
+        batch_size = 1
+        cuda = False
+        bptt = 16
+
+    eval_batch_size = min(100, args.batch_size)
+    val_data = batchify(corpus.valid, eval_batch_size, args)
+    print(get_batch(val_data, 0, args))
+
