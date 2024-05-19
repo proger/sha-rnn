@@ -264,8 +264,9 @@ def train(epoch=0):
 
         #output, hidden, rnn_hs, dropped_rnn_hs = model(data, hidden, return_h=True)
         #output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
-        output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
-        raw_loss = criterion(model.decoder.weight, model.decoder.bias, output, targets.view(-1))
+        with torch.autocast('cuda', dtype=torch.float16):
+            output, hidden, mems, attn_outs, _ = model(data, hidden, return_h=True, mems=mems)
+            raw_loss = criterion(model.decoder.weight, model.decoder.bias, output, targets.view(-1))
 
         losses.append(raw_loss)
 
@@ -298,12 +299,15 @@ def train(epoch=0):
             loss = functools.reduce(lambda x, y: x + y, losses)
             #print(losses)
             #loss.backward()
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
+            #with amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaler.scale(loss).backward()
 
             # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-            if args.clip: torch.nn.utils.clip_grad_norm_(params, args.clip)
-            optimizer.step()
+            if args.clip:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(params, args.clip)
+            scaler.step(optimizer)
+            scaler.update()
             if hidden is not None:
                 #if np.random.random() > 0.975:
                 #    hidden = None
@@ -314,7 +318,7 @@ def train(epoch=0):
                 #    mems = None
                 #    mems = zero_hidden(mems)
                 mems = repackage_hidden(mems)
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             losses = []
 
         if args.wdrop:
@@ -370,9 +374,10 @@ try:
         print('Lookahead - k {} and alpha {}'.format(k, alpha))
         optimizer = Lookahead(base_optimizer=optimizer, k=k, alpha=alpha)
 
-    from apex import amp
-    model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
+    #from apex import amp
+    #model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
     #model, optimizer = amp.initialize(model, optimizer, opt_level='O2')
+    scaler = torch.cuda.amp.GradScaler(enabled=True)
 
     for epoch in range(1, args.epochs+1):
         epoch_start_time = time.time()
@@ -404,6 +409,9 @@ try:
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                 'valid ppl {:8.2f} | valid bpc {:8.3f}'.format(
               epoch, (time.time() - epoch_start_time), val_loss, math.exp(val_loss), val_loss / math.log(2)))
+            test_loss = evaluate(test_data, test_batch_size)
+            print('| end of epoch {:3d} | test loss {:5.2f} | test ppl {:8.2f} | test bpc {:8.3f}'.format(
+                    epoch, test_loss, math.exp(test_loss), test_loss / math.log(2)))
             print('-' * 89)
 
             if val_loss < stored_loss:
